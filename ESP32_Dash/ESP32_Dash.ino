@@ -61,6 +61,7 @@ void setupOLED() {
     if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
         Serial.println(F("SSD1306 allocation failed"));
     } else {
+        display.setRotation(2); // rotate display 180 degrees
         display.clearDisplay();
         display.setTextColor(SSD1306_WHITE);
         display.setTextSize(1);
