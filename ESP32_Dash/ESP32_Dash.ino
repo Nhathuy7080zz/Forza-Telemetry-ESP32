@@ -179,13 +179,15 @@ void loop() {
         if (millis() - lastSerialRecv < 1000) {
             updateOLED();
         } else {
-            // Mất kết nối serial
+            // Không có dữ liệu mới từ game, thường là đang paused hoặc ở menu
             display.clearDisplay();
             display.setTextSize(1);
             display.setCursor(0, 0);
             display.println(WiFi.localIP());
             display.setCursor(0, 20);
-            display.println("Waiting for PC data...");
+            display.println("PAUSED");
+            display.setCursor(0, 32);
+            display.println("No game data");
             display.display();
         }
         lastOledUpdate = millis();

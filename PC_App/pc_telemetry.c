@@ -4,6 +4,7 @@
 #include <windows.h>
 #include <stdint.h>
 #include <math.h>
+#include <string.h>
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -11,7 +12,7 @@
 // The payload sent over serial to ESP32 (Compact to ensure 115200 baud speed)
 typedef struct {
     uint8_t magic;      // 0xAA
-    uint8_t gear;       // 0=R, 1-10
+    uint8_t gear;       // 0=R, 11=N, 1-10=gears
     float speed;        // km/h
     float hp;
     float torque;
@@ -29,58 +30,35 @@ typedef struct {
     float tire_s[4];    // Slip
     uint8_t checksum;
 } SerialPayload;
-
-// Standard Forza Horizon Data Out Packet structure (Data Out V2)
-typedef struct {
-    int32_t isRaceOn; 
-    uint32_t timestampMS; 
-    float engineMaxRpm; 
-    float engineIdleRpm; 
-    float currentEngineRpm; 
-    float accX; float accY; float accZ;
-    float velX; float velY; float velZ;
-    float angVelX; float angVelY; float angVelZ;
-    float yaw; float pitch; float roll; 
-    float normSuspTravelFL; float normSuspTravelFR; float normSuspTravelRL; float normSuspTravelRR; 
-    float tireSlipRatioFL; float tireSlipRatioFR; float tireSlipRatioRL; float tireSlipRatioRR; 
-    float wheelRotSpeedFL; float wheelRotSpeedFR; float wheelRotSpeedRL; float wheelRotSpeedRR; 
-    int32_t wheelOnRumbleFL; int32_t wheelOnRumbleFR; int32_t wheelOnRumbleRL; int32_t wheelOnRumbleRR; 
-    float wheelInPuddleFL; float wheelInPuddleFR; float wheelInPuddleRL; float wheelInPuddleRR; 
-    float surfRumbleFL; float surfRumbleFR; float surfRumbleRL; float surfRumbleRR; 
-    float tireSlipAngleFL; float tireSlipAngleFR; float tireSlipAngleRL; float tireSlipAngleRR; 
-    float tireCombinedSlipFL; float tireCombinedSlipFR; float tireCombinedSlipRL; float tireCombinedSlipRR; 
-    float suspTravelMetersFL; float suspTravelMetersFR; float suspTravelMetersRL; float suspTravelMetersRR; 
-    int32_t carOrdinal; 
-    int32_t carClass; 
-    int32_t carPerformanceIndex;
-    int32_t drivetrainType;
-    int32_t numCylinders; 
-    
-    // V2 Dash additions
-    float posX; float posY; float posZ;
-    float speed; 
-    float power; 
-    float torque; 
-    float tireTempFL; float tireTempFR; float tireTempRL; float tireTempRR; 
-    float boost; 
-    float fuel; 
-    float distanceTraveled; 
-    float bestLap; 
-    float lastLap; 
-    float currentLap; 
-    float currentRaceTime; 
-    uint16_t lapNumber; 
-    uint8_t racePosition; 
-    uint8_t accel;  
-    uint8_t brake;  
-    uint8_t clutch; 
-    uint8_t handBrake; 
-    uint8_t gear; 
-    int8_t steer; 
-    int8_t normDrivingLine; 
-    int8_t normAIBrakeDiff; 
-} ForzaTelemetry;
 #pragma pack(pop)
+
+static float read_f32(const uint8_t* data, int offset) {
+    float value;
+    memcpy(&value, data + offset, sizeof(value));
+    return value;
+}
+
+static int32_t read_i32(const uint8_t* data, int offset) {
+    int32_t value;
+    memcpy(&value, data + offset, sizeof(value));
+    return value;
+}
+
+static int8_t read_i8(const uint8_t* data, int offset) {
+    int8_t value;
+    memcpy(&value, data + offset, sizeof(value));
+    return value;
+}
+
+static uint8_t clamp_u8(int value) {
+    if (value < 0) return 0;
+    if (value > 255) return 255;
+    return (uint8_t)value;
+}
+
+static int f_to_c(float f_temp) {
+    return (int)((f_temp - 32.0f) * 5.0f / 9.0f);
+}
 
 HANDLE hSerial = INVALID_HANDLE_VALUE;
 
@@ -124,7 +102,7 @@ uint8_t calcChecksum(uint8_t* data, int len) {
 int main(int argc, char* argv[]) {
     // Config: Allow passing COM port and listen port via arguments
     const char* comPort = "COM6";
-    int listenPort = 5301;  // Trò chơi FH6 sẽ gửi data tới port này
+    int listenPort = 5607;  // FH6 telemetry port from the reference FH6 Telemetry bridge
     int flydigiPort = 5300; // Forward cho Flydigi trên máy
     
     if (argc > 1) comPort = argv[1];
@@ -176,43 +154,63 @@ int main(int argc, char* argv[]) {
         // Xử lý gửi thẳng UDP raw về cho Flydigi để không bị delay
         sendto(udpSocket, buffer, bytes, 0, (struct sockaddr*)&flydigiAddr, sizeof(flydigiAddr));
 
-        // Format v2 parse để gửi xuống ESP32
-        if (bytes >= sizeof(ForzaTelemetry)) {
-            ForzaTelemetry* fh = (ForzaTelemetry*)buffer;
-            
-            if (fh->isRaceOn == 0) continue; // Không ở trong race/freeroam
+        // Format parse đúng theo FH6 Telemetry reference (server.py / main.cpp)
+        if (bytes >= 321) {
+            const uint8_t* fh = (const uint8_t*)buffer;
+            if (read_i32(fh, 0) == 0) continue; // Not race/active, keep ESP quiet
+
+            const float rpm = read_f32(fh, 16);
+            const float ax = read_f32(fh, 20);
+            const float az = read_f32(fh, 28);
+            const float speed_ms = read_f32(fh, 256);
+            const float power_w = read_f32(fh, 260);
+            const float torque_nm = read_f32(fh, 264);
+            const float temp_fl = read_f32(fh, 268);
+            const float temp_fr = read_f32(fh, 272);
+            const float temp_rl = read_f32(fh, 276);
+            const float temp_rr = read_f32(fh, 280);
+            const float boost_psi = read_f32(fh, 284);
+            const float susp_fl = read_f32(fh, 68);
+            const float susp_fr = read_f32(fh, 72);
+            const float susp_rl = read_f32(fh, 76);
+            const float susp_rr = read_f32(fh, 80);
+            const float slip_fl = read_f32(fh, 84);
+            const float slip_fr = read_f32(fh, 88);
+            const float slip_rl = read_f32(fh, 92);
+            const float slip_rr = read_f32(fh, 96);
+            const uint8_t accel = fh[315];
+            const uint8_t brake = fh[316];
+            const uint8_t clutch = fh[317];
+            const uint8_t ebrake = fh[318];
+            const uint8_t gear = fh[319];
+            const int8_t steer = read_i8(fh, 320);
 
             SerialPayload p;
             p.magic = 0xAA;
-            p.gear = fh->gear;
-            p.speed = fh->speed * 3.6f; // m/s to km/h
-            p.hp = fh->power * 0.00134102f; // Watts to HP
-            p.torque = fh->torque;
-            p.boost = fh->boost / 14.5038f; // psi to bar roughly, or native depends on game
-            p.glat = fh->accX / 9.81f; // G-force
-            p.glon = fh->accZ / 9.81f;
-            p.rpm = fh->currentEngineRpm;
-            p.steer = fh->steer; // -127 to 127
-            p.accel = (uint8_t)((fh->accel / 255.0f) * 100);
-            p.brake = (uint8_t)((fh->brake / 255.0f) * 100);
-            p.clutch = (uint8_t)((fh->clutch / 255.0f) * 100);
-            p.ebrake = (uint8_t)((fh->handBrake / 255.0f) * 100);
-            
-            p.susp[0] = fh->normSuspTravelFL; p.susp[1] = fh->normSuspTravelFR;
-            p.susp[2] = fh->normSuspTravelRL; p.susp[3] = fh->normSuspTravelRR;
-            
-            p.tire_t[0] = (fh->tireTempFL - 32) * 5.0f/9.0f; // F to C if it's in F
-            p.tire_t[1] = (fh->tireTempFR - 32) * 5.0f/9.0f;
-            p.tire_t[2] = (fh->tireTempRL - 32) * 5.0f/9.0f;
-            p.tire_t[3] = (fh->tireTempRR - 32) * 5.0f/9.0f;
-            
-            p.tire_s[0] = fh->tireCombinedSlipFL;
-            p.tire_s[1] = fh->tireCombinedSlipFR;
-            p.tire_s[2] = fh->tireCombinedSlipRL;
-            p.tire_s[3] = fh->tireCombinedSlipRR;
-            
+            p.gear = gear;
+            p.speed = speed_ms * 3.6f;
+            p.hp = power_w * 0.00134102f;
+            p.torque = torque_nm;
+            p.boost = (boost_psi > 14.7f) ? (boost_psi - 14.7f) * 0.0689476f : 0.0f;
+            p.glat = ax / 9.81f;
+            p.glon = az / 9.81f;
+            p.rpm = rpm;
+            p.steer = steer;
+            p.accel = clamp_u8((int)(accel / 255.0f * 100.0f));
+            p.brake = clamp_u8((int)(brake / 255.0f * 100.0f));
+            p.clutch = clamp_u8((int)(clutch / 255.0f * 100.0f));
+            p.ebrake = clamp_u8((int)(ebrake / 255.0f * 100.0f));
+            p.susp[0] = susp_fl; p.susp[1] = susp_fr; p.susp[2] = susp_rl; p.susp[3] = susp_rr;
+            p.tire_t[0] = (float)f_to_c(temp_fl);
+            p.tire_t[1] = (float)f_to_c(temp_fr);
+            p.tire_t[2] = (float)f_to_c(temp_rl);
+            p.tire_t[3] = (float)f_to_c(temp_rr);
+            p.tire_s[0] = fabsf(slip_fl);
+            p.tire_s[1] = fabsf(slip_fr);
+            p.tire_s[2] = fabsf(slip_rl);
+            p.tire_s[3] = fabsf(slip_rr);
             p.checksum = calcChecksum((uint8_t*)&p, sizeof(SerialPayload) - 1);
-            
+
             if (hSerial != INVALID_HANDLE_VALUE) {
                 WriteFile(hSerial, &p, sizeof(SerialPayload), &bytesWritten, NULL);
             }
