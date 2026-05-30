@@ -191,7 +191,7 @@ int main(int argc, char* argv[]) {
             p.speed = speed_ms * 3.6f;
             p.hp = power_w * 0.00134102f;
             p.torque = torque_nm;
-            p.boost = (boost_psi > 14.7f) ? (boost_psi - 14.7f) * 0.0689476f : 0.0f;
+            p.boost = (boost_psi - 14.7f) * 0.0689476f;
             p.glat = ax / 9.81f;
             p.glon = az / 9.81f;
             p.rpm = rpm;

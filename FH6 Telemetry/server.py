@@ -39,7 +39,7 @@ class ForzaTelemetryProtocol:
         steer, = struct.unpack_from('<b', data, 320)
 
         gear_str = 'R' if gear == 0 else ('N' if gear == 11 else str(gear))
-        boost_bar = max(0.0, (boost_psi - 14.7) * 0.0689476)
+        boost_bar = (boost_psi - 14.7) * 0.0689476
 
         # f-string JSON — faster than json.dumps (avoids dict alloc + encoder)
         payload = (

@@ -343,18 +343,17 @@ body {
   border: 1px solid var(--border2);
   position: relative;
   overflow: hidden;
-  display: flex;
-  flex-direction: column-reverse;
 }
 
 .susp-fill {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
   background: var(--muted);
   border-radius: 3px;
-  transform-origin: bottom;
-  transform: scaleY(0);
-  will-change: transform;
+  will-change: height;
 }
 
 #cvs-gball {
@@ -402,17 +401,16 @@ body {
   border: 1px solid var(--border2);
   position: relative;
   overflow: hidden;
-  display: flex;
-  flex-direction: column-reverse;
 }
 
 .ped-fill {
-  width: 100%;
-  height: 100%;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0%;
   border-radius: 3px;
-  transform-origin: bottom;
-  transform: scaleY(0);
-  will-change: transform;
+  will-change: height;
 }
 
 .ped-pct {
@@ -540,13 +538,6 @@ canvas.cvs {
       <div class="stat-inner">
         <span class="stat-v" id="val-tq" style="color:var(--amber)">0</span>
         <span class="stat-u">Nm</span>
-      </div>
-    </div>
-    <div class="stat">
-      <div class="lbl">Boost</div>
-      <div class="stat-inner">
-        <span class="stat-v" id="val-boost" style="color:var(--blue)">0.00</span>
-        <span class="stat-u">bar</span>
       </div>
     </div>
     <div class="stat steer-wrap">
@@ -783,11 +774,13 @@ function scrollPush(c, vals, colors) {
   // Auto-scale
   const localMax = Math.max(...vals);
   if (!c.max) c.max = 10;
-  
-  if (localMax * 1.15 > c.max) {
-    c.max = localMax * 1.15; // Nâng nhanh, chừa 15% headroom để không clipping
-  } else {
-    c.max = c.max * 0.999 + Math.max(localMax, 0.01) * 0.001; // Hạ từ từ
+  const hasSignal = localMax > 0.001;
+  const targetMax = hasSignal ? Math.max(localMax * 1.35, c.max, 10) : c.max;
+
+  if (targetMax > c.max) {
+    c.max = c.max + (targetMax - c.max) * 0.72;
+  } else if (hasSignal) {
+    c.max = c.max * 0.997 + targetMax * 0.003;
   }
   
   if (c.max < 10 && c.el.id !== 'cvs-slp') c.max = 10;
@@ -885,7 +878,7 @@ const $ = id => document.getElementById(id);
 const dom = {
   gear:  $('val-gear'),  speed: $('val-speed'),
   hp:    $('val-hp'),    tq:    $('val-tq'),
-  boost: $('val-boost'), glat:  $('val-glat'), glon: $('val-glon'),
+  glat:  $('val-glat'), glon: $('val-glon'),
   steer: $('steer-dot'),
   sFL:   $('s-fl'),      sFR:   $('s-fr'),
   sRL:   $('s-rl'),      sRR:   $('s-rr'),
@@ -899,6 +892,7 @@ const dom = {
 
 let lastMsgTime = 0;
 let isSuspAvailable = false;
+let lastVisualUpdate = 0;
 
 // ─────────────────────────────────────────────────────────────────
 // RENDER LOOP — decoupled from WS, runs at display refresh rate
@@ -910,7 +904,7 @@ function resetDash() {
   const zeroStr = "0";
   dom.gear.textContent = "-"; dom.gear.style.color = '#ffffff'; dom.gear.style.textShadow = 'none';
   dom.speed.textContent = "0";
-  dom.hp.textContent = "0"; dom.tq.textContent = "0"; dom.boost.textContent = "0.00";
+  dom.hp.textContent = "0"; dom.tq.textContent = "0";
   dom.glat.textContent = "0.00"; dom.glon.textContent = "0.00";
   dom.steer.style.left = "50%";
   
@@ -921,6 +915,14 @@ function resetDash() {
   
   if(dom.sFL) { dom.sFL.style.height='0%'; dom.sFR.style.height='0%'; dom.sRL.style.height='0%'; dom.sRR.style.height='0%'; }
   updateLEDs(0);
+}
+
+function clamp01(v) {
+  return Math.max(0, Math.min(1, v));
+}
+
+function clampPct(v) {
+  return Math.max(0, Math.min(100, v));
 }
 
 function t(el, val) {
@@ -938,7 +940,6 @@ function render() {
     t(dom.speed, d.speed.toFixed(1));
     t(dom.hp, d.hp);
     t(dom.tq, d.torque);
-    t(dom.boost, d.boost.toFixed(2));
     t(dom.glat, d.glat.toFixed(2));
     t(dom.glon, d.glon.toFixed(2));
 
@@ -960,20 +961,27 @@ function render() {
     updateLEDs(d.rpm);
 
     // ── Steering ──
-    dom.steer.style.transform = `translateX(-50%) translateX(${d.steer}px)`;
+    const steerTrack = dom.steer.parentElement;
+    const steerTravel = Math.max(0, (steerTrack.clientWidth - dom.steer.offsetWidth) / 2);
+    const steerValue = Math.max(-100, Math.min(100, d.steer)) / 100;
+    dom.steer.style.transform = `translateX(-50%) translateX(${steerValue * steerTravel}px)`;
 
     // ── Pedals (vertical) ──
-    dom.pThr.style.transform = `scaleY(${d.accel/100})`; t(dom.pvThr, d.accel  + '%');
-    dom.pBrk.style.transform = `scaleY(${d.brake/100})`; t(dom.pvBrk, d.brake  + '%');
-    dom.pClu.style.transform = `scaleY(${d.clutch/100})`; t(dom.pvClu, d.clutch + '%');
-    dom.pEbk.style.transform = `scaleY(${d.ebrake/100})`; t(dom.pvEbk, d.ebrake + '%');
+    const thrPct = clampPct(d.accel);
+    const brkPct = clampPct(d.brake);
+    const cluPct = clampPct(d.clutch);
+    const ebkPct = clampPct(d.ebrake);
+    dom.pThr.style.height = `${thrPct}%`; t(dom.pvThr, thrPct.toFixed(0) + '%');
+    dom.pBrk.style.height = `${brkPct}%`; t(dom.pvBrk, brkPct.toFixed(0) + '%');
+    dom.pClu.style.height = `${cluPct}%`; t(dom.pvClu, cluPct.toFixed(0) + '%');
+    dom.pEbk.style.height = `${ebkPct}%`; t(dom.pvEbk, ebkPct.toFixed(0) + '%');
 
     // ── Suspension ──
     if (d.susp && dom.sFL) {
-      dom.sFL.style.transform = `scaleY(${d.susp.fl})`;
-      dom.sFR.style.transform = `scaleY(${d.susp.fr})`;
-      dom.sRL.style.transform = `scaleY(${d.susp.rl})`;
-      dom.sRR.style.transform = `scaleY(${d.susp.rr})`;
+      dom.sFL.style.height = `${clamp01(d.susp.fl) * 100}%`;
+      dom.sFR.style.height = `${clamp01(d.susp.fr) * 100}%`;
+      dom.sRL.style.height = `${clamp01(d.susp.rl) * 100}%`;
+      dom.sRR.style.height = `${clamp01(d.susp.rr) * 100}%`;
     }
 
     // ── Tires ──
@@ -987,21 +995,24 @@ function render() {
       t(el.querySelector('.tire-s'), td.s.toFixed(2));
     }
 
-    // ── G-Ball ──
-    gTrail.push({ lat: d.glat, lon: d.glon });
-    if (gTrail.length > TRAIL) gTrail.shift();
-    drawGBall(d.glat, d.glon);
+    if (now - lastVisualUpdate > 40) {
+      // ── G-Ball ──
+      gTrail.push({ lat: d.glat, lon: d.glon });
+      if (gTrail.length > TRAIL) gTrail.shift();
+      drawGBall(d.glat, d.glon);
 
-    // ── Scrolling charts (O(1) per frame) ──
-    scrollPush(charts.pwr, [Math.max(0, d.hp), Math.max(0, d.torque)], ['#00f5d4', '#ffa500']);
-    scrollPush(charts.rpm, [d.rpm], ['#39ff14']);
-    scrollPush(charts.spd, [d.speed], ['#ffffff']);
-    scrollPush(charts.slp, 
-      [d.tires.fl.s, d.tires.fr.s, d.tires.rl.s, d.tires.rr.s],
-      ['#4da6ff','#00d4e8','#f72585','#ffa500']
-    );
+      // ── Scrolling charts (throttled to lower CPU/GPU cost) ──
+      scrollPush(charts.pwr, [Math.max(0, d.hp), Math.max(0, d.torque)], ['#00f5d4', '#ffa500']);
+      scrollPush(charts.rpm, [d.rpm], ['#39ff14']);
+      scrollPush(charts.spd, [d.speed], ['#ffffff']);
+      scrollPush(charts.slp, 
+        [d.tires.fl.s, d.tires.fr.s, d.tires.rl.s, d.tires.rr.s],
+        ['#4da6ff','#00d4e8','#f72585','#ffa500']
+      );
+      lastVisualUpdate = now;
+    }
 
-  } else if (now - lastMsgTime > 250 && now - lastReset > 100) {
+  } else if (now - lastMsgTime > 1000 && now - lastReset > 100) {
     resetDash();
     gTrail.length = 0;
     drawGBall(0, 0);
