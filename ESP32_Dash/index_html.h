@@ -1,0 +1,1060 @@
+﻿#pragma once
+const char index_html[] PROGMEM = R"HTML(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Forza Telemetry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #05080f;
+  --surface:  #0b1220;
+  --surface2: #0f1830;
+  --border:   #162035;
+  --border2:  #1e2d45;
+  --text:     #c8d8f0;
+  --muted:    #3a5070;
+  --teal:     #00f5d4;
+  --pink:     #f72585;
+  --amber:    #ffa500;
+  --white:    #ffffff;
+  --green:    #39ff14;
+  --blue:     #4da6ff;
+  --font-hud: 'Chakra Petch', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-hud);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+/* ─── LAYOUT ─────────────────────────────────────────────────── */
+.dash {
+  width: 1280px;
+  height: 720px;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: 240px 1fr 230px;
+  grid-template-rows: 45px 1fr 1fr minmax(0, 1.2fr);
+  grid-template-areas:
+    "rpm-bar  rpm-bar  rpm-bar"
+    "gear     speed    tires"
+    "stats    gball    pedals"
+    "charts   charts   charts";
+  gap: 12px;
+  transform-origin: center center;
+}
+
+/* ─── COMMON PANEL ───────────────────────────────────────────── */
+.pnl {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* subtle scan-line texture */
+.pnl::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(255,255,255,0.012) 3px,
+    rgba(255,255,255,0.012) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.lbl {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  font-weight: 600;
+  font-family: var(--font-hud);
+}
+
+/* ─── RPM LED BAR ────────────────────────────────────────────── */
+.rpm-bar {
+  grid-area: rpm-bar;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+}
+
+#rpm-readout {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  min-width: 72px;
+  text-align: right;
+  letter-spacing: 1px;
+  transition: color 0.1s;
+  white-space: nowrap;
+  padding-right: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.led {
+  flex: 1;
+  height: 22px;
+  border-radius: 3px;
+  background: #0c1525;
+  border: 1px solid #0f1e35;
+  transition: background 60ms linear, box-shadow 60ms linear;
+}
+
+/* ─── GEAR ───────────────────────────────────────────────────── */
+.gear-pnl {
+  grid-area: gear;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+#val-gear {
+  font-size: clamp(70px, 11vh, 110px);
+  font-weight: 700;
+  font-family: var(--font-hud);
+  line-height: 0.95;
+  color: var(--white);
+  transition: color 0.08s, text-shadow 0.08s;
+  z-index: 1;
+}
+
+/* ─── SPEED ──────────────────────────────────────────────────── */
+.speed-pnl {
+  grid-area: speed;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+#val-speed {
+  font-size: clamp(90px, 16vh, 160px);
+  font-weight: 700;
+  font-family: var(--font-hud);
+  line-height: 0.9;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+  z-index: 1;
+}
+
+.speed-unit {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  z-index: 1;
+}
+
+/* glow ring effect behind speed */
+.speed-pnl::after {
+  content: '';
+  position: absolute;
+  width: 55%;
+  height: 70%;
+  background: radial-gradient(ellipse, rgba(0,245,212,0.04) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* ─── TIRES ──────────────────────────────────────────────────── */
+.tires-pnl {
+  grid-area: tires;
+  display: grid;
+  grid-template-rows: 18px 1fr 1fr;
+  gap: 6px;
+  padding: 10px;
+}
+
+.tires-title {
+  text-align: center;
+  z-index: 1;
+}
+
+.tire-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.tire {
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: background-color 200ms ease, color 200ms ease;
+  gap: 2px;
+  z-index: 1;
+}
+
+.tire-t {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tire-s {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+/* ─── STATS ──────────────────────────────────────────────────── */
+.stats-pnl {
+  grid-area: stats;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  gap: 4px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 1;
+}
+
+.stat-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.stat-v {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-u {
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  margin-left: 3px;
+}
+
+/* Steer ─────────────────────────────── */
+.steer-wrap {
+  z-index: 1;
+}
+
+.steer-track {
+  position: relative;
+  height: 3px;
+  background: #0c1525;
+  border-radius: 2px;
+  border: 1px solid var(--border2);
+  margin-top: 5px;
+}
+
+.steer-ctr {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 13px;
+  background: var(--border2);
+}
+
+.steer-dot {
+  position: absolute;
+  top: -5px;
+  left: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--white);
+  transform: translateX(-50%);
+  will-change: transform;
+  /* Removed expensive JS-stuttering box-shadow & left-transition */
+}
+
+/* ─── G-BALL & SUSP ────────────────────────────────────────────── */
+.gball-pnl {
+  grid-area: gball;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 10px 6px;
+  gap: 4px;
+}
+
+.gball-layout {
+  display: flex;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.susp-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 8px;
+  height: 90%;
+  z-index: 1;
+}
+
+.susp-track {
+  flex: 1;
+  width: 100%;
+  background: #07101f;
+  border-radius: 4px;
+  border: 1px solid var(--border2);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.susp-fill {
+  width: 100%;
+  height: 100%;
+  background: var(--muted);
+  border-radius: 3px;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  will-change: transform;
+}
+
+#cvs-gball {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  display: block;
+}
+
+.gball-vals {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  z-index: 1;
+}
+
+/* ─── PEDALS ─────────────────────────────────────────────────── */
+.pedals-pnl {
+  grid-area: pedals;
+  padding: 10px 8px;
+  display: flex;
+  gap: 5px;
+  align-items: stretch;
+}
+
+.ped-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.ped-track {
+  flex: 1;
+  width: 100%;
+  background: #07101f;
+  border-radius: 5px;
+  border: 1px solid var(--border2);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.ped-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  transform-origin: bottom;
+  transform: scaleY(0);
+  will-change: transform;
+}
+
+.ped-pct {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  z-index: 1;
+}
+
+/* ─── CHARTS ─────────────────────────────────────────────────── */
+.charts-pnl {
+  grid-area: charts;
+  padding: 8px;
+  display: flex;
+  gap: 6px;
+  min-height: 0;
+}
+
+.chart-col {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: #07101f;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.chart-lbl {
+  position: absolute;
+  top: 4px;
+  left: 7px;
+  z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  pointer-events: none;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.chart-lbl span { display: flex; align-items: center; gap: 3px; }
+
+canvas.cvs {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ─── WS STATUS ──────────────────────────────────────────────── */
+#ws-status {
+  position: fixed;
+  bottom: 10px;
+  right: 14px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--muted);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#ws-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.3s;
+}
+
+#ws-dot.live { background: var(--teal); box-shadow: 0 0 6px var(--teal); }
+#ws-dot.dead { background: var(--pink); }
+</style>
+</head>
+<body>
+<div class="dash">
+
+  <!-- RPM LED BAR -->
+  <div class="pnl rpm-bar" id="rpm-bar">
+    <span id="rpm-readout">0 RPM</span>
+    <!-- LEDs injected by JS -->
+  </div>
+
+  <!-- GEAR -->
+  <div class="pnl gear-pnl">
+    <div class="lbl">Gear</div>
+    <div id="val-gear">-</div>
+  </div>
+
+  <!-- SPEED -->
+  <div class="pnl speed-pnl">
+    <div id="val-speed">0</div>
+    <div class="speed-unit">km / h</div>
+  </div>
+
+  <!-- TIRES -->
+  <div class="pnl tires-pnl">
+    <div class="lbl tires-title">Tire Temp · Slip</div>
+    <div class="tire-row">
+      <div class="tire" id="t-fl"><span class="tire-t">0°</span><span class="tire-s">0.00</span></div>
+      <div class="tire" id="t-fr"><span class="tire-t">0°</span><span class="tire-s">0.00</span></div>
+    </div>
+    <div class="tire-row">
+      <div class="tire" id="t-rl"><span class="tire-t">0°</span><span class="tire-s">0.00</span></div>
+      <div class="tire" id="t-rr"><span class="tire-t">0°</span><span class="tire-s">0.00</span></div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="pnl stats-pnl">
+    <div class="stat">
+      <div class="lbl">Power</div>
+      <div class="stat-inner">
+        <span class="stat-v" id="val-hp" style="color:var(--teal)">0</span>
+        <span class="stat-u">HP</span>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Torque</div>
+      <div class="stat-inner">
+        <span class="stat-v" id="val-tq" style="color:var(--amber)">0</span>
+        <span class="stat-u">Nm</span>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="lbl">Boost</div>
+      <div class="stat-inner">
+        <span class="stat-v" id="val-boost" style="color:var(--blue)">0.00</span>
+        <span class="stat-u">bar</span>
+      </div>
+    </div>
+    <div class="stat steer-wrap">
+      <div class="lbl">Steer</div>
+      <div class="steer-track">
+        <div class="steer-ctr"></div>
+        <div class="steer-dot" id="steer-dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- G-BALL & SUSP -->
+  <div class="pnl gball-pnl">
+    <div class="lbl">G-Force & Susp</div>
+    <div class="gball-layout">
+      <!-- left susp bars -->
+      <div class="susp-col">
+        <div class="susp-track" title="FL Susp"><div class="susp-fill" id="s-fl"></div></div>
+        <div class="susp-track" title="RL Susp"><div class="susp-fill" id="s-rl"></div></div>
+      </div>
+      
+      <canvas id="cvs-gball"></canvas>
+      
+      <!-- right susp bars -->
+      <div class="susp-col">
+        <div class="susp-track" title="FR Susp"><div class="susp-fill" id="s-fr"></div></div>
+        <div class="susp-track" title="RR Susp"><div class="susp-fill" id="s-rr"></div></div>
+      </div>
+    </div>
+    <div class="gball-vals">
+      <span style="color:var(--amber)">LAT <span id="val-glat">0.00</span>g</span>
+      <span style="color:var(--teal)">LON <span id="val-glon">0.00</span>g</span>
+    </div>
+  </div>
+
+  <!-- PEDALS -->
+  <div class="pnl pedals-pnl">
+    <div class="ped-col">
+      <div class="lbl" style="font-size:8px">THR</div>
+      <div class="ped-track">
+        <div class="ped-fill" id="p-thr" style="background:linear-gradient(to top,#39ff14,#00c853)"></div>
+      </div>
+      <div class="ped-pct" id="pv-thr">0%</div>
+    </div>
+    <div class="ped-col">
+      <div class="lbl" style="font-size:8px">BRK</div>
+      <div class="ped-track">
+        <div class="ped-fill" id="p-brk" style="background:linear-gradient(to top,#f72585,#ff6090)"></div>
+      </div>
+      <div class="ped-pct" id="pv-brk">0%</div>
+    </div>
+    <div class="ped-col">
+      <div class="lbl" style="font-size:8px">CLU</div>
+      <div class="ped-track">
+        <div class="ped-fill" id="p-clu" style="background:linear-gradient(to top,#4da6ff,#82c1ff)"></div>
+      </div>
+      <div class="ped-pct" id="pv-clu">0%</div>
+    </div>
+    <div class="ped-col">
+      <div class="lbl" style="font-size:8px">EBK</div>
+      <div class="ped-track">
+        <div class="ped-fill" id="p-ebk" style="background:linear-gradient(to top,#ffa500,#ffd060)"></div>
+      </div>
+      <div class="ped-pct" id="pv-ebk">0%</div>
+    </div>
+  </div>
+
+  <!-- CHARTS -->
+  <div class="pnl charts-pnl">
+    <div class="chart-col">
+      <div class="chart-lbl">
+        <div style="display:flex;gap:8px;">
+          <span style="color:#00f5d4">■ HP</span>
+          <span style="color:#ffa500">■ TQ</span>
+        </div>
+        <span class="max-val" id="max-pwr" style="margin-left:auto;color:var(--muted)">0</span>
+      </div>
+      <canvas class="cvs" id="cvs-pwr"></canvas>
+    </div>
+    <div class="chart-col">
+      <div class="chart-lbl">
+        <span style="color:#39ff14">■ RPM</span>
+        <span class="max-val" id="max-rpm" style="margin-left:auto;color:var(--muted)">0</span>
+      </div>
+      <canvas class="cvs" id="cvs-rpm"></canvas>
+    </div>
+    <div class="chart-col">
+      <div class="chart-lbl">
+        <span style="color:#ffffff">■ Speed</span>
+        <span class="max-val" id="max-spd" style="margin-left:auto;color:var(--muted)">0</span>
+      </div>
+      <canvas class="cvs" id="cvs-spd"></canvas>
+    </div>
+    <div class="chart-col">
+      <div class="chart-lbl">
+        <div style="display:flex;gap:8px;">
+          <span style="color:#4da6ff">■FL</span>
+          <span style="color:#00d4e8">■FR</span>
+          <span style="color:#f72585">■RL</span>
+          <span style="color:#ffa500">■RR</span>
+        </div>
+        <span class="max-val" id="max-slp" style="margin-left:auto;color:var(--muted)">1.5</span>
+      </div>
+      <canvas class="cvs" id="cvs-slp"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- WS indicator -->
+<div id="ws-status"><div id="ws-dot"></div><span id="ws-txt">CONNECTING</span></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────
+const MAX_RPM   = 10000;
+const MAX_POWER = 1200;
+const MAX_SPEED = 500;
+const MAX_SLIP  = 2.0;
+const MAX_G     = 2.0;
+const LED_COUNT = 28;
+
+// ─────────────────────────────────────────────────────────────────
+// RPM LED BAR  — build once, update via direct style
+// ─────────────────────────────────────────────────────────────────
+const rpmBarEl = document.getElementById('rpm-bar');
+const rpmReadout = document.getElementById('rpm-readout');
+const leds = [];
+for (let i = 0; i < LED_COUNT; i++) {
+  const d = document.createElement('div');
+  d.className = 'led';
+  rpmBarEl.appendChild(d);
+  leds.push(d);
+}
+
+let lastLit = -1;
+function updateLEDs(rpm) {
+  // Safe default min-max just in case
+  const maxR = charts.rpm.max && charts.rpm.max > 0 ? charts.rpm.max : 10000;
+  const ratio = Math.min(1, rpm / (maxR * 0.97));
+  const lit = Math.round(ratio * LED_COUNT);
+
+  const rpmStr = parseInt(rpm).toLocaleString() + ' RPM';
+  if (rpmReadout.textContent !== rpmStr) {
+    rpmReadout.textContent = rpmStr;
+    rpmReadout.style.color = ratio > 0.9 ? '#f72585' : (ratio > 0.75 ? '#ffd600' : '#3a5070');
+  }
+
+  if (lit === lastLit) return;
+  lastLit = lit;
+
+  for (let i = 0; i < LED_COUNT; i++) {
+    if (i < lit) {
+      let c, s;
+      const r = i / LED_COUNT;
+      if (r < 0.6)      { c = '#39ff14'; s = `0 0 7px #39ff1480`; }
+      else if (r < 0.8) { c = '#ffd600'; s = `0 0 7px #ffd60080`; }
+      else              { c = '#f72585'; s = `0 0 8px #f7258580`; }
+      leds[i].style.background = c;
+      leds[i].style.boxShadow  = s;
+    } else {
+      leds[i].style.background  = '#0c1525';
+      leds[i].style.boxShadow   = 'none';
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// TIRE COLOR — temp-based gradient
+// ─────────────────────────────────────────────────────────────────
+function tireColor(c) {
+  if (c < 45)  return ['#0a1f3d', '#4da6ff'];
+  if (c < 75)  return [lerp('#0a1f3d','#0a3020', (c-45)/30), '#7ecfff'];
+  if (c < 95)  return [lerp('#0a3020','#1a3800', (c-75)/20), '#39ff14'];
+  if (c < 115) return [lerp('#1a3800','#3d1a00', (c-95)/20), '#ffd600'];
+  if (c < 135) return [lerp('#3d1a00','#4a0000', (c-115)/20), '#ff6030'];
+  return ['#3a0000', '#f72585'];
+}
+
+function lerp(a, b, t) {
+  const ah = parseInt(a.slice(1),16), bh = parseInt(b.slice(1),16);
+  const ar=ah>>16, ag=(ah>>8)&0xff, ab=ah&0xff;
+  const br=bh>>16, bg=(bh>>8)&0xff, bb=bh&0xff;
+  const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), bl=Math.round(ab+(bb-ab)*t);
+  return '#'+((r<<16)|(g<<8)|bl).toString(16).padStart(6,'0');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SCROLLING CANVAS CHARTS — O(1) per update
+// ─────────────────────────────────────────────────────────────────
+const charts = {
+  pwr: { el: document.getElementById('cvs-pwr'), ctx: null, prev: [null, null], max: 500, lbl: document.getElementById('max-pwr') },
+  rpm: { el: document.getElementById('cvs-rpm'), ctx: null, prev: [null], max: 5000, lbl: document.getElementById('max-rpm') },
+  spd: { el: document.getElementById('cvs-spd'), ctx: null, prev: [null], max: 200, lbl: document.getElementById('max-spd') },
+  slp: { el: document.getElementById('cvs-slp'), ctx: null, prev: [null,null,null,null], max: 1.5, lbl: document.getElementById('max-slp') },
+};
+
+for (const k in charts) {
+  charts[k].ctx = charts[k].el.getContext('2d', { willReadFrequently: true });
+}
+
+function resizeCharts() {
+  const dash = document.querySelector('.dash');
+  // Dùng document.documentElement.clientHeight để lấy đúng chiều cao hiển thị trên mobile/tablet (tránh thanh address bar)
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const scale = Math.min(vw / 1300, vh / 740); // Chừa thêm tí padding so với 1280x720
+  dash.style.transform = `scale(${scale})`;
+
+  for (const k in charts) {
+    const c = charts[k];
+    const wrap = c.el.parentElement;
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    if (w > 0 && h > 0 && (c.el.width !== w || c.el.height !== h)) {
+      c.el.width = w; c.el.height = h;
+      c.prev = c.prev.map(() => null);
+    }
+  }
+  const gb = document.getElementById('cvs-gball');
+  // Just use the actual rendered size of the canvas element
+  const gw = gb.clientWidth;
+  const gh = gb.clientHeight;
+  if (gw > 0 && gh > 0 && (gb.width !== gw || gb.height !== gh)) { 
+    gb.width = gw; 
+    gb.height = gh; 
+  }
+}
+
+function scrollPush(c, vals, colors) {
+  const { ctx, el, prev } = c;
+  const w = el.width, h = el.height;
+  if (!w || !h) return;
+
+  // Auto-scale
+  const localMax = Math.max(...vals);
+  if (!c.max) c.max = 10;
+  
+  if (localMax * 1.15 > c.max) {
+    c.max = localMax * 1.15; // Nâng nhanh, chừa 15% headroom để không clipping
+  } else {
+    c.max = c.max * 0.999 + Math.max(localMax, 0.01) * 0.001; // Hạ từ từ
+  }
+  
+  if (c.max < 10 && c.el.id !== 'cvs-slp') c.max = 10;
+  if (c.max < 1.0 && c.el.id === 'cvs-slp') c.max = 1.0; 
+
+  if (c.lbl) c.lbl.textContent = c.max >= 100 ? Math.round(c.max) : c.max.toFixed(1);
+
+  const imgData = ctx.getImageData(1, 0, w - 1, h);
+  ctx.putImageData(imgData, 0, 0);
+  ctx.clearRect(w - 1, 0, 1, h);
+
+  for (let i = 0; i < vals.length; i++) {
+    const newY = h - Math.max(0, Math.min(1, vals[i] / c.max)) * h;
+    const pY = prev[i] ?? newY;
+    const minY = Math.min(pY, newY);
+    const segH = Math.max(1, Math.abs(pY - newY) + 1);
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(w - 1, minY, 1, segH);
+    c.prev[i] = newY;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// G-BALL
+// ─────────────────────────────────────────────────────────────────
+const gTrail = [];
+const TRAIL  = 55;
+
+function drawGBall(lat, lon) {
+  const cv = document.getElementById('cvs-gball');
+  const cx2 = cv.getContext('2d');
+  const w = cv.width, h = cv.height;
+  if (!w || !h) return;
+  const cx = w/2, cy = h/2;
+  const r = Math.min(cx, cy) - 10;
+
+  cx2.clearRect(0,0,w,h);
+
+  // Quadrant tints
+  cx2.save();
+  cx2.beginPath(); cx2.arc(cx, cy, r, 0, Math.PI*2); cx2.clip();
+  cx2.fillStyle = 'rgba(0,245,212,0.04)';
+  cx2.fillRect(cx,0,r,h);  // right = accel
+  cx2.fillStyle = 'rgba(247,37,133,0.04)';
+  cx2.fillRect(0,0,cx,h);   // left = brake left
+  cx2.restore();
+
+  // Rings at 0.5/1.0/1.5/2.0g with labels
+  cx2.lineWidth = 1;
+  const ringFontSz = Math.max(8, r * 0.10);
+  cx2.font = `${ringFontSz}px JetBrains Mono, monospace`;
+  cx2.textAlign = 'center';
+  [0.5, 1.0, 1.5, 2.0].forEach(g => {
+    const rf = g / MAX_G;
+    cx2.strokeStyle = g === 1.0 ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.08)';
+    cx2.beginPath(); cx2.arc(cx, cy, r * rf, 0, Math.PI * 2); cx2.stroke();
+    cx2.fillStyle = 'rgba(255,255,255,0.22)';
+    cx2.fillText(g.toFixed(1) + 'g', cx, cy - r * rf + ringFontSz);
+  });
+  cx2.strokeStyle = 'rgba(255,255,255,0.09)';
+  cx2.beginPath(); cx2.moveTo(cx, cy - r); cx2.lineTo(cx, cy + r); cx2.stroke();
+  cx2.beginPath(); cx2.moveTo(cx - r, cy); cx2.lineTo(cx + r, cy); cx2.stroke();
+
+  // Trail
+  if (gTrail.length > 1) {
+    cx2.beginPath();
+    gTrail.forEach((p, i) => {
+      const x = cx + (p.lat/MAX_G)*r;
+      const y = cy - (p.lon/MAX_G)*r;
+      i === 0 ? cx2.moveTo(x,y) : cx2.lineTo(x,y);
+    });
+    cx2.strokeStyle = 'rgba(255,166,0,0.55)';
+    cx2.lineWidth = 2;
+    cx2.stroke();
+  }
+
+  // Current dot
+  const px = cx + (lat/MAX_G)*r;
+  const py = cy - (lon/MAX_G)*r;
+
+  // Faint gradient/ring for "glow" (saves GPU compared to shadowBlur)
+  cx2.beginPath(); cx2.arc(px, py, 14, 0, Math.PI*2);
+  cx2.fillStyle = 'rgba(255, 165, 0, 0.2)';
+  cx2.fill();
+
+  cx2.beginPath(); cx2.arc(px,py,5,0,Math.PI*2);
+  cx2.fillStyle = '#ffa500';
+  cx2.fill();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// DOM REFS
+// ─────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const dom = {
+  gear:  $('val-gear'),  speed: $('val-speed'),
+  hp:    $('val-hp'),    tq:    $('val-tq'),
+  boost: $('val-boost'), glat:  $('val-glat'), glon: $('val-glon'),
+  steer: $('steer-dot'),
+  sFL:   $('s-fl'),      sFR:   $('s-fr'),
+  sRL:   $('s-rl'),      sRR:   $('s-rr'),
+  pThr:  $('p-thr'),  pvThr: $('pv-thr'),
+  pBrk:  $('p-brk'),  pvBrk: $('pv-brk'),
+  pClu:  $('p-clu'),  pvClu: $('pv-clu'),
+  pEbk:  $('p-ebk'),  pvEbk: $('pv-ebk'),
+  tires: { fl:$('t-fl'), fr:$('t-fr'), rl:$('t-rl'), rr:$('t-rr') },
+  wsDot: $('ws-dot'), wsTxt: $('ws-txt'),
+};
+
+let lastMsgTime = 0;
+let isSuspAvailable = false;
+
+// ─────────────────────────────────────────────────────────────────
+// RENDER LOOP — decoupled from WS, runs at display refresh rate
+// ─────────────────────────────────────────────────────────────────
+let latest = null;
+let lastReset = 0;
+
+function resetDash() {
+  const zeroStr = "0";
+  dom.gear.textContent = "-"; dom.gear.style.color = '#ffffff'; dom.gear.style.textShadow = 'none';
+  dom.speed.textContent = "0";
+  dom.hp.textContent = "0"; dom.tq.textContent = "0"; dom.boost.textContent = "0.00";
+  dom.glat.textContent = "0.00"; dom.glon.textContent = "0.00";
+  dom.steer.style.left = "50%";
+  
+  dom.pThr.style.height = '0%'; dom.pvThr.textContent = '0%';
+  dom.pBrk.style.height = '0%'; dom.pvBrk.textContent = '0%';
+  dom.pClu.style.height = '0%'; dom.pvClu.textContent = '0%';
+  dom.pEbk.style.height = '0%'; dom.pvEbk.textContent = '0%';
+  
+  if(dom.sFL) { dom.sFL.style.height='0%'; dom.sFR.style.height='0%'; dom.sRL.style.height='0%'; dom.sRR.style.height='0%'; }
+  updateLEDs(0);
+}
+
+function t(el, val) {
+  if (el.textContent != val) el.textContent = val;
+}
+
+function render() {
+  const now = Date.now();
+  if (latest) {
+    lastMsgTime = now;
+    const d = latest; latest = null;
+
+    // ── Text ──
+    t(dom.gear, d.gear);
+    t(dom.speed, d.speed.toFixed(1));
+    t(dom.hp, d.hp);
+    t(dom.tq, d.torque);
+    t(dom.boost, d.boost.toFixed(2));
+    t(dom.glat, d.glat.toFixed(2));
+    t(dom.glon, d.glon.toFixed(2));
+
+    // ── Gear shift light ──
+    const maxR = charts.rpm.max && charts.rpm.max > 0 ? charts.rpm.max : 10000;
+    const rpmRatio = d.rpm / maxR;
+    if (rpmRatio > 0.92) {
+      dom.gear.style.color = '#f72585';
+      dom.gear.style.textShadow = '0 0 30px #f7258580';
+    } else if (rpmRatio > 0.8) {
+      dom.gear.style.color = '#ffd600';
+      dom.gear.style.textShadow = '0 0 20px #ffd60050';
+    } else {
+      dom.gear.style.color = '#ffffff';
+      dom.gear.style.textShadow = 'none';
+    }
+
+    // ── LED RPM bar ──
+    updateLEDs(d.rpm);
+
+    // ── Steering ──
+    dom.steer.style.transform = `translateX(-50%) translateX(${d.steer}px)`;
+
+    // ── Pedals (vertical) ──
+    dom.pThr.style.transform = `scaleY(${d.accel/100})`; t(dom.pvThr, d.accel  + '%');
+    dom.pBrk.style.transform = `scaleY(${d.brake/100})`; t(dom.pvBrk, d.brake  + '%');
+    dom.pClu.style.transform = `scaleY(${d.clutch/100})`; t(dom.pvClu, d.clutch + '%');
+    dom.pEbk.style.transform = `scaleY(${d.ebrake/100})`; t(dom.pvEbk, d.ebrake + '%');
+
+    // ── Suspension ──
+    if (d.susp && dom.sFL) {
+      dom.sFL.style.transform = `scaleY(${d.susp.fl})`;
+      dom.sFR.style.transform = `scaleY(${d.susp.fr})`;
+      dom.sRL.style.transform = `scaleY(${d.susp.rl})`;
+      dom.sRR.style.transform = `scaleY(${d.susp.rr})`;
+    }
+
+    // ── Tires ──
+    for (const k of ['fl','fr','rl','rr']) {
+      const td = d.tires[k];
+      const [bg, fg] = tireColor(td.t);
+      const el = dom.tires[k];
+      el.style.backgroundColor = bg;
+      el.style.color = fg;
+      t(el.querySelector('.tire-t'), td.t + '°C');
+      t(el.querySelector('.tire-s'), td.s.toFixed(2));
+    }
+
+    // ── G-Ball ──
+    gTrail.push({ lat: d.glat, lon: d.glon });
+    if (gTrail.length > TRAIL) gTrail.shift();
+    drawGBall(d.glat, d.glon);
+
+    // ── Scrolling charts (O(1) per frame) ──
+    scrollPush(charts.pwr, [Math.max(0, d.hp), Math.max(0, d.torque)], ['#00f5d4', '#ffa500']);
+    scrollPush(charts.rpm, [d.rpm], ['#39ff14']);
+    scrollPush(charts.spd, [d.speed], ['#ffffff']);
+    scrollPush(charts.slp, 
+      [d.tires.fl.s, d.tires.fr.s, d.tires.rl.s, d.tires.rr.s],
+      ['#4da6ff','#00d4e8','#f72585','#ffa500']
+    );
+
+  } else if (now - lastMsgTime > 250 && now - lastReset > 100) {
+    resetDash();
+    gTrail.length = 0;
+    drawGBall(0, 0);
+    // Let charts scroll empty values so they settle to 0
+    scrollPush(charts.pwr, [0, 0], ['#00f5d4', '#ffa500']);
+    scrollPush(charts.rpm, [0], ['#39ff14']);
+    scrollPush(charts.spd, [0], ['#ffffff']);
+    scrollPush(charts.slp, [0, 0, 0, 0], ['#4da6ff','#00d4e8','#f72585','#ffa500']);
+    lastReset = now;
+  }
+
+  requestAnimationFrame(render);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// WEBSOCKET  (auto-reconnect)
+// ─────────────────────────────────────────────────────────────────
+function connect() {
+  const host = window.location.hostname || 'localhost';
+  const ws = new WebSocket(`ws://${host}:8765`);
+
+  ws.onopen = () => {
+    dom.wsDot.className = 'live';
+    dom.wsTxt.textContent = 'LIVE';
+  };
+
+  ws.onmessage = e => {
+    latest = JSON.parse(e.data);
+  };
+
+  ws.onclose = () => {
+    dom.wsDot.className = 'dead';
+    dom.wsTxt.textContent = 'RECONNECTING...';
+    setTimeout(connect, 2000);
+  };
+
+  ws.onerror = () => ws.close();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(resizeCharts, 80);
+});
+setTimeout(resizeCharts, 120);
+
+connect();
+requestAnimationFrame(render);
+</script>
+</body>
+</html>
+
+)HTML";
