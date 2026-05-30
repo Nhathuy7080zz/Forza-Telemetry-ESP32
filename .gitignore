@@ -1,0 +1,21 @@
+# C/C++
+*.exe
+*.o
+*.obj
+*.dll
+*.lib
+
+# Node/Python
+node_modules/
+__pycache__/
+*.pyc
+
+# Arduino/ESP32
+build/
+*.bin
+*.elf
+*.local.txt
+
+# OS
+.DS_Store
+Thumbs.db
