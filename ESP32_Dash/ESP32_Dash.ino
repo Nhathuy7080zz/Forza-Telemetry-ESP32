@@ -107,31 +107,34 @@ void setup() {
 
 void updateOLED() {
     display.clearDisplay();
-    display.setTextSize(2);
+    const int rpmMax = 10000;
+    const int rpmValue = (int)payload.rpm;
+    const int rpmClamped = rpmValue < 0 ? 0 : (rpmValue > rpmMax ? rpmMax : rpmValue);
+    const int barWidth = map(rpmClamped, 0, rpmMax, 0, 128);
+
+    // Speed is the primary readout, so make it visually dominant.
+    display.setTextSize(3);
     display.setCursor(0, 0);
-    
-    // Tốc độ (km/h)
     display.print((int)payload.speed);
     display.setTextSize(1);
-    display.print(" kmh");
-    
-    // Số
-    display.setCursor(90, 0);
+    display.setCursor(92, 8);
+    display.print("kmh");
+
+    // Gear stays visible but secondary.
     display.setTextSize(2);
+    display.setCursor(100, 0);
     if (payload.gear == 0) display.print("R");
+    else if (payload.gear == 11) display.print("N");
     else display.print((int)payload.gear);
 
-    // Vòng tua (rpm)
-    display.setTextSize(2);
-    display.setCursor(0, 25);
-    display.print((int)payload.rpm);
+    // RPM is shown as a rising bar instead of a number.
     display.setTextSize(1);
-    display.print(" rpm");
-
-    // Thanh vòng tua ảo
-    int barWidth = map((int)payload.rpm, 0, 10000, 0, 128);
-    display.drawRect(0, 48, 128, 10, SSD1306_WHITE);
-    display.fillRect(0, 48, barWidth, 10, SSD1306_WHITE);
+    display.setCursor(0, 28);
+    display.print("RPM");
+    display.drawRect(0, 40, 128, 12, SSD1306_WHITE);
+    display.fillRect(0, 40, barWidth, 12, SSD1306_WHITE);
+    display.setCursor(98, 28);
+    display.print(rpmValue);
 
     display.display();
 }
@@ -181,13 +184,14 @@ void loop() {
         } else {
             // Không có dữ liệu mới từ game, thường là đang paused hoặc ở menu
             display.clearDisplay();
-            display.setTextSize(1);
+            display.setTextSize(2);
             display.setCursor(0, 0);
-            display.println(WiFi.localIP());
-            display.setCursor(0, 20);
             display.println("PAUSED");
-            display.setCursor(0, 32);
+            display.setTextSize(1);
+            display.setCursor(0, 22);
             display.println("No game data");
+            display.setCursor(0, 34);
+            display.println(WiFi.localIP());
             display.display();
         }
         lastOledUpdate = millis();
