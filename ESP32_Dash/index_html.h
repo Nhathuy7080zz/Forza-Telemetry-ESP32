@@ -1020,8 +1020,9 @@ function render() {
 // WEBSOCKET  (auto-reconnect)
 // ─────────────────────────────────────────────────────────────────
 function connect() {
-  const host = window.location.hostname || 'localhost';
-  const ws = new WebSocket(`ws://${host}:8765`);
+  const host = window.location.host || 'localhost';
+  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${host}/ws`);
 
   ws.onopen = () => {
     dom.wsDot.className = 'live';
