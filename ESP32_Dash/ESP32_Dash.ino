@@ -117,7 +117,7 @@ void updateOLED() {
     display.setCursor(0, 0);
     display.print((int)payload.speed);
     display.setTextSize(1);
-    display.setCursor(92, 8);
+    display.setCursor(0, 24);
     display.print("kmh");
 
     // Gear stays visible but secondary.
